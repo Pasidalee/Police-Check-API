@@ -1,5 +1,6 @@
 import ballerina/http;
 import ballerinax/postgresql;
+import ballerina/log;
 import ballerina/sql;
 
 configurable string host = ?;
@@ -14,7 +15,7 @@ const PENDING = "pending";
 const NO_ROWS_ERROR_MSG = "Query did not retrieve any rows.";
 const USER_NOT_FOUND = "User not found";
 
-isolated service / on new http:Listener(9090) {
+isolated service / on new http:Listener(9093) {
     private final postgresql:Client dbClient;
 
     public isolated function init() returns error? {
@@ -23,6 +24,7 @@ isolated service / on new http:Listener(9090) {
     }
 
     isolated resource function get policecheck(string userId) returns error? {
+        log:printInfo("Received request for police check for user: ", userId = userId);
         boolean policeClearance = check getPoliceStatus(userId, self.dbClient);
         if policeClearance {
             _ = check updateValidation(userId, self.dbClient);
