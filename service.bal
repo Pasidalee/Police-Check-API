@@ -1,17 +1,49 @@
 import ballerina/http;
+import ballerinax/postgresql;
+import ballerina/sql;
 
-# A service representing a network-accessible API
-# bound to port `9090`.
-service / on new http:Listener(9090) {
+configurable string host = ?;
+configurable string username = ?;
+configurable string password = ?;
+configurable string database = ?;
+configurable int port = ?;
 
-    # A resource for generating greetings
-    # + name - the input string name
-    # + return - string name with hello message or error
-    resource function get greeting(string name) returns string|error {
-        // Send a response back to the caller.
-        if name is "" {
-            return error("name should not be empty!");
-        }
-        return "Hello, " + name;
+const APPROVED = "approved";
+const DECLINED = "declined";
+const PENDING = "pending";
+const NO_ROWS_ERROR_MSG = "Query did not retrieve any rows.";
+const USER_NOT_FOUND = "User not found";
+
+isolated service / on new http:Listener(9090) {
+    private final postgresql:Client dbClient;
+
+    public isolated function init() returns error? {
+        // Initialize the database
+        self.dbClient = check new (host, username, password, database, port);
     }
+
+    isolated resource function get policecheck(string userId) returns error? {
+        boolean policeClearance = check getPoliceStatus(userId, self.dbClient);
+        if policeClearance {
+            _ = check updateValidation(userId, self.dbClient);
+        }
+        _ = check updateStatus(userId, PENDING, self.dbClient);
+    }
+}
+
+isolated function getPoliceStatus(string userId, postgresql:Client dbClient) returns boolean|error {
+    sql:ParameterizedQuery query = `SELECT police_check FROM user_details WHERE user_id = ${userId}`;
+    return dbClient->queryRow(query);
+}
+
+isolated function updateValidation(string userId, postgresql:Client dbClient) returns error? {
+    sql:ParameterizedQuery query = `UPDATE certificate_requests SET police_check = true WHERE user_id = ${userId} AND status != ${APPROVED} 
+            AND status != ${DECLINED}`;
+    _ = check dbClient->execute(query);
+}
+
+isolated function updateStatus(string userId, string status, postgresql:Client dbClient) returns error? {
+    sql:ParameterizedQuery query = `UPDATE certificate_requests SET status = ${status} WHERE user_id = ${userId} AND 
+            status != ${APPROVED} AND status != ${DECLINED}`;
+    _ = check dbClient->execute(query);
 }
